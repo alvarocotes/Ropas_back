@@ -2,6 +2,21 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 
+interface ResponseLike {
+  setHeader(name: string, value: string): void;
+}
+
+/**
+ * Lecturas públicas que puede guardar la CDN: se recalculan como máximo una vez
+ * por minuto y así las páginas abiertas no esperan a que arranque la función.
+ */
+const CACHEABLE_PATHS = new Set([
+  '/api/needs',
+  '/api/stats/volunteers-count',
+  '/api/about/sections',
+  '/api/about/impact',
+]);
+
 /**
  * Crea la aplicación Nest con toda su configuración, sin ponerla a escuchar.
  * La usan el arranque local (main.ts) y la función serverless (api/index.js).
@@ -9,6 +24,15 @@ import { AppModule } from './app.module.js';
 export async function createApp() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
+  app.use((req: { method: string; path: string }, res: ResponseLike, next: () => void) => {
+    if (req.method === 'GET' && CACHEABLE_PATHS.has(req.path)) {
+      res.setHeader(
+        'Cache-Control',
+        'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
+      );
+    }
+    next();
+  });
   // Acepta peticiones desde cualquier origen: la API se autentica con el token
   // JWT en la cabecera Authorization, no con cookies de sesión.
   app.enableCors({ origin: true, credentials: true });

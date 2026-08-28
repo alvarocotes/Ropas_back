@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RequestStatus, UserRole } from '../common/enums.js';
@@ -42,6 +43,7 @@ const DEFAULT_SECTIONS: Array<Pick<AboutSection, 'sectionKey' | 'title' | 'body'
 @Injectable()
 export class AboutService implements OnModuleInit {
   constructor(
+    private readonly configService: ConfigService,
     @InjectRepository(AboutSection)
     private readonly sectionsRepository: Repository<AboutSection>,
     @InjectRepository(HelpRequest)
@@ -53,7 +55,10 @@ export class AboutService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.seedSections();
+    // Igual que el administrador inicial: se crea a propósito, no en cada arranque.
+    if (this.configService.get<string>('SEED_ON_START', 'false') === 'true') {
+      await this.seedSections();
+    }
   }
 
   /** Crea los bloques de texto la primera vez para que la página no quede vacía. */

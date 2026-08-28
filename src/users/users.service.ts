@@ -26,7 +26,11 @@ export class UsersService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.seedAdmin();
+    // Solo con SEED_ON_START=true: en serverless este chequeo se pagaría en
+    // cada arranque en frío, antes de responder la primera petición.
+    if (this.configService.get<string>('SEED_ON_START', 'false') === 'true') {
+      await this.seedAdmin();
+    }
   }
 
   toSafe(user: User): SafeUser {

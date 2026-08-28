@@ -26,9 +26,9 @@ function databaseOptions(config: ConfigService): TypeOrmModuleOptions {
       password: config.get<string>('DB_PASSWORD', ''),
       database: config.get<string>('DB_NAME', 'abrigar'),
       autoLoadEntities: true,
-      // En serverless conviene desactivarlo (DB_SYNC=false) una vez creado el
-      // esquema: cada arranque en frío compararía las tablas antes de responder.
-      synchronize: config.get<string>('DB_SYNC', 'true') !== 'false',
+      // Solo se activa a propósito (DB_SYNC=true, en desarrollo): comparar el
+      // esquema tarda unos segundos y se pagaría en cada arranque en frío.
+      synchronize: config.get<string>('DB_SYNC', 'false') === 'true',
       charset: 'utf8mb4',
       driver: mysql2,
       // Fallar rápido en lugar de reintentar diez veces y agotar el tiempo de la función.
