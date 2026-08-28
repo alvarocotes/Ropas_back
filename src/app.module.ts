@@ -26,9 +26,16 @@ function databaseOptions(config: ConfigService): TypeOrmModuleOptions {
       password: config.get<string>('DB_PASSWORD', ''),
       database: config.get<string>('DB_NAME', 'abrigar'),
       autoLoadEntities: true,
-      synchronize: true,
+      // En serverless conviene desactivarlo (DB_SYNC=false) una vez creado el
+      // esquema: cada arranque en frío compararía las tablas antes de responder.
+      synchronize: config.get<string>('DB_SYNC', 'true') !== 'false',
       charset: 'utf8mb4',
       driver: mysql2,
+      // Fallar rápido en lugar de reintentar diez veces y agotar el tiempo de la función.
+      retryAttempts: 2,
+      retryDelay: 1000,
+      // Un MySQL compartido tiene pocas conexiones y cada instancia abre su propio pool.
+      extra: { connectionLimit: 3 },
     };
   }
   return {
