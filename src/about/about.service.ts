@@ -119,15 +119,37 @@ export class AboutService implements OnModuleInit {
       },
     });
 
-    return delivered.map((request) => ({
-      id: request.id,
-      address: request.residenceAfter,
-      peopleCount: request.peopleCount,
-      latitude: request.latitude === null ? null : Number(request.latitude),
-      longitude: request.longitude === null ? null : Number(request.longitude),
-      geoLabel: request.geoLabel,
-      manualItemsDelivered: request.manualItemsDelivered,
-    }));
+    const itemsByRequest = await this.sumItemsByRequest();
+
+    return delivered.map((request) => {
+      const fromInventory = itemsByRequest.get(request.id) ?? 0;
+      return {
+        id: request.id,
+        address: request.residenceAfter,
+        peopleCount: request.peopleCount,
+        latitude: request.latitude === null ? null : Number(request.latitude),
+        longitude: request.longitude === null ? null : Number(request.longitude),
+        geoLabel: request.geoLabel,
+        manualItemsDelivered: request.manualItemsDelivered,
+        /** Prendas que el voluntario registró en el paquete, tomadas del inventario. */
+        itemsFromInventory: fromInventory,
+        itemsDelivered: fromInventory + request.manualItemsDelivered,
+      };
+    });
+  }
+
+  /** Prendas entregadas por solicitud, sumadas del paquete que armó el voluntario. */
+  private async sumItemsByRequest(): Promise<Map<number, number>> {
+    const rows = await this.itemsRepository
+      .createQueryBuilder('item')
+      .innerJoin('item.helpRequest', 'request')
+      .where('request.status = :status', { status: RequestStatus.ENTREGADO })
+      .groupBy('item.help_request_id')
+      .select('item.help_request_id', 'requestId')
+      .addSelect('COALESCE(SUM(item.quantity), 0)', 'total')
+      .getRawMany<{ requestId: number; total: string }>();
+
+    return new Map(rows.map((row) => [Number(row.requestId), Number(row.total)]));
   }
 
   /** Fija a mano el punto y las prendas de una entrega histórica. */
@@ -172,6 +194,7 @@ export class AboutService implements OnModuleInit {
         latitude: true,
         longitude: true,
         geoLabel: true,
+        manualItemsDelivered: true,
       },
     });
 
@@ -197,7 +220,7 @@ export class AboutService implements OnModuleInit {
       ],
     });
 
-    const points = this.buildPoints(delivered);
+    const points = this.buildPoints(delivered, await this.sumItemsByRequest());
 
     return {
       peopleHelped,
@@ -213,7 +236,10 @@ export class AboutService implements OnModuleInit {
    * Un punto por entrega geocodificada. Se redondean las coordenadas a tres decimales
    * (unos 100 m) y se publica solo el sector, para no señalar la casa de nadie.
    */
-  private buildPoints(delivered: Array<Partial<HelpRequest>>) {
+  private buildPoints(
+    delivered: Array<Partial<HelpRequest>>,
+    itemsByRequest: Map<number, number>,
+  ) {
     return delivered
       .filter(hasCoords)
       .map((request) => ({
@@ -222,6 +248,8 @@ export class AboutService implements OnModuleInit {
         latitude: round(Number(request.latitude), 3),
         longitude: round(Number(request.longitude), 3),
         peopleHelped: request.peopleCount ?? 0,
+        itemsDelivered:
+          (itemsByRequest.get(request.id as number) ?? 0) + (request.manualItemsDelivered ?? 0),
       }))
       .sort((a, b) => b.peopleHelped - a.peopleHelped);
   }
