@@ -5,8 +5,10 @@ import { AppModule } from './app.module.js';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
+  // Acepta peticiones desde cualquier origen: la API se autentica con el token
+  // JWT en la cabecera Authorization, no con cookies de sesión.
   app.enableCors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    origin: true,
     credentials: true,
   });
   app.useGlobalPipes(
