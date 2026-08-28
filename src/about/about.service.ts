@@ -144,8 +144,8 @@ export class AboutService implements OnModuleInit {
       .createQueryBuilder('item')
       .innerJoin('item.helpRequest', 'request')
       .where('request.status = :status', { status: RequestStatus.ENTREGADO })
-      .groupBy('item.help_request_id')
-      .select('item.help_request_id', 'requestId')
+      .groupBy('item.helpRequestId')
+      .select('item.helpRequestId', 'requestId')
       .addSelect('COALESCE(SUM(item.quantity), 0)', 'total')
       .getRawMany<{ requestId: number; total: string }>();
 
