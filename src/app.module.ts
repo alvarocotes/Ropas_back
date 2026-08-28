@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule, type TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { join } from 'node:path';
+// Import explícito del driver: TypeORM lo carga con require() dinámico y los
+// empaquetadores de despliegue (Lambda, Vercel) no lo detectan, dejándolo fuera.
+import mysql2 from 'mysql2';
 import { AuthModule } from './auth/auth.module.js';
 import { DonationsModule } from './donations/donations.module.js';
 import { HelpRequestsModule } from './help-requests/help-requests.module.js';
@@ -25,6 +28,7 @@ function databaseOptions(config: ConfigService): TypeOrmModuleOptions {
       autoLoadEntities: true,
       synchronize: true,
       charset: 'utf8mb4',
+      driver: mysql2,
     };
   }
   return {
