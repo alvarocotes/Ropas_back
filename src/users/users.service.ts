@@ -13,8 +13,6 @@ import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { User } from './user.entity.js';
 
-const MAX_VOLUNTEERS = 2;
-
 export type SafeUser = Omit<User, 'passwordHash'>;
 
 @Injectable()
@@ -85,14 +83,6 @@ export class UsersService implements OnModuleInit {
       throw new BadRequestException('Ya existe un usuario con ese correo');
     }
     const role = dto.role ?? UserRole.VOLUNTEER;
-    if (role === UserRole.VOLUNTEER) {
-      const activeVolunteers = await this.countActiveVolunteers();
-      if (activeVolunteers >= MAX_VOLUNTEERS) {
-        throw new BadRequestException(
-          `Solo se permiten ${MAX_VOLUNTEERS} voluntarios activos. Desactiva uno antes de crear otro.`,
-        );
-      }
-    }
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const user = this.usersRepository.create({
       email: dto.email,
@@ -110,18 +100,6 @@ export class UsersService implements OnModuleInit {
     const user = await this.findById(id);
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
-    }
-    if (dto.role === UserRole.VOLUNTEER || (user.role === UserRole.VOLUNTEER && dto.isActive === true)) {
-      const willBeVolunteer = (dto.role ?? user.role) === UserRole.VOLUNTEER;
-      const willBeActive = dto.isActive ?? user.isActive;
-      if (willBeVolunteer && willBeActive && !(user.role === UserRole.VOLUNTEER && user.isActive)) {
-        const activeVolunteers = await this.countActiveVolunteers();
-        if (activeVolunteers >= MAX_VOLUNTEERS) {
-          throw new BadRequestException(
-            `Solo se permiten ${MAX_VOLUNTEERS} voluntarios activos.`,
-          );
-        }
-      }
     }
     if (dto.fullName !== undefined) user.fullName = dto.fullName;
     if (dto.phone !== undefined) user.phone = dto.phone;
