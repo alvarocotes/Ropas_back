@@ -9,7 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { TimeVolunteerStatus } from '../common/enums.js';
+import { TimeVolunteerHelpType, TimeVolunteerStatus, VehicleKind } from '../common/enums.js';
 
 /** Un tramo horario de alguien que se ofrece a ayudar con tiempo (1 = lunes … 7 = domingo). */
 @Entity('time_volunteer_slots')
@@ -57,6 +57,18 @@ export class TimeVolunteer {
   /** Notas internas de admin o recepción al coordinar. */
   @Column({ name: 'staff_notes', type: 'varchar', length: 1000, nullable: true })
   staffNotes: string | null;
+
+  @Column({ name: 'help_type', type: 'varchar', length: 32, default: TimeVolunteerHelpType.TRANSPORTE })
+  helpType: TimeVolunteerHelpType;
+
+  @Column({ name: 'has_vehicle', default: false })
+  hasVehicle: boolean;
+
+  @Column({ name: 'vehicle_type', type: 'varchar', length: 32, nullable: true })
+  vehicleType: VehicleKind | null;
+
+  @Column({ name: 'vehicle_info', type: 'varchar', length: 200, nullable: true })
+  vehicleInfo: string | null;
 
   @Column({ type: 'varchar', length: 32, default: TimeVolunteerStatus.NUEVO })
   status: TimeVolunteerStatus;

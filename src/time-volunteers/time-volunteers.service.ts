@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { TimeVolunteerStatus } from '../common/enums.js';
+import { TimeVolunteerHelpType, TimeVolunteerStatus } from '../common/enums.js';
 import { CreateTimeVolunteerDto } from './dto/create-time-volunteer.dto.js';
 import { UpdateTimeVolunteerDto } from './dto/update-time-volunteer.dto.js';
 import { TimeVolunteer, TimeVolunteerSlot } from './time-volunteer.entity.js';
@@ -33,6 +33,10 @@ export class TimeVolunteersService implements OnModuleInit {
             email VARCHAR(150) NULL,
             notes VARCHAR(1000) NULL,
             staff_notes VARCHAR(1000) NULL,
+            help_type VARCHAR(32) NOT NULL DEFAULT 'transporte',
+            has_vehicle TINYINT(1) NOT NULL DEFAULT 0,
+            vehicle_type VARCHAR(32) NULL,
+            vehicle_info VARCHAR(200) NULL,
             status VARCHAR(32) NOT NULL DEFAULT 'nuevo',
             created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
             updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
@@ -59,6 +63,10 @@ export class TimeVolunteersService implements OnModuleInit {
             email VARCHAR(150),
             notes VARCHAR(1000),
             staff_notes VARCHAR(1000),
+            help_type VARCHAR(32) NOT NULL DEFAULT 'transporte',
+            has_vehicle INTEGER NOT NULL DEFAULT 0,
+            vehicle_type VARCHAR(32),
+            vehicle_info VARCHAR(200),
             status VARCHAR(32) NOT NULL DEFAULT 'nuevo',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -75,8 +83,46 @@ export class TimeVolunteersService implements OnModuleInit {
           )
         `);
       }
+      await this.ensureTransportColumns(dbType);
     } catch (err) {
-      console.error('No se pudieron asegurar las tablas de voluntarios de tiempo:', err);
+      console.error('No se pudieron asegurar las tablas de voluntarios de transporte:', err);
+    }
+  }
+
+  private async ensureTransportColumns(dbType: string): Promise<void> {
+    const columns =
+      dbType === 'mysql'
+        ? [
+            { name: 'has_vehicle', sql: 'TINYINT(1) NOT NULL DEFAULT 0' },
+            { name: 'vehicle_info', sql: 'VARCHAR(200) NULL' },
+            { name: 'help_type', sql: "VARCHAR(32) NOT NULL DEFAULT 'transporte'" },
+            { name: 'vehicle_type', sql: 'VARCHAR(32) NULL' },
+          ]
+        : [
+            { name: 'has_vehicle', sql: 'INTEGER NOT NULL DEFAULT 0' },
+            { name: 'vehicle_info', sql: 'VARCHAR(200)' },
+            { name: 'help_type', sql: "VARCHAR(32) NOT NULL DEFAULT 'transporte'" },
+            { name: 'vehicle_type', sql: 'VARCHAR(32)' },
+          ];
+    const existing = new Set<string>();
+    if (dbType === 'mysql') {
+      const rows: Array<{ Field?: string }> = await this.volunteersRepository.query(
+        'SHOW COLUMNS FROM time_volunteers',
+      );
+      for (const row of rows) {
+        if (row.Field) existing.add(row.Field);
+      }
+    } else {
+      const rows: Array<{ name: string }> = await this.volunteersRepository.query(
+        'PRAGMA table_info(time_volunteers)',
+      );
+      for (const row of rows) existing.add(row.name);
+    }
+    for (const column of columns) {
+      if (existing.has(column.name)) continue;
+      await this.volunteersRepository.query(
+        `ALTER TABLE time_volunteers ADD COLUMN ${column.name} ${column.sql}`,
+      );
     }
   }
 
@@ -88,6 +134,10 @@ export class TimeVolunteersService implements OnModuleInit {
       email: volunteer.email,
       notes: volunteer.notes,
       staffNotes: volunteer.staffNotes,
+      helpType: volunteer.helpType ?? TimeVolunteerHelpType.TRANSPORTE,
+      hasVehicle: Boolean(volunteer.hasVehicle),
+      vehicleType: volunteer.vehicleType ?? null,
+      vehicleInfo: volunteer.vehicleInfo,
       status: volunteer.status,
       createdAt: volunteer.createdAt,
       availability: (volunteer.slots ?? [])
@@ -101,7 +151,7 @@ export class TimeVolunteersService implements OnModuleInit {
     };
   }
 
-  private validateSlots(slots: CreateTimeVolunteerDto['slots']) {
+  private validateSlots(slots: CreateTimeVolunteerDto['slots'] = []) {
     const weekdays = new Set<number>();
     for (const slot of slots) {
       if (weekdays.has(slot.weekday)) {
@@ -117,27 +167,45 @@ export class TimeVolunteersService implements OnModuleInit {
   }
 
   async create(dto: CreateTimeVolunteerDto) {
-    this.validateSlots(dto.slots);
+    const slots = dto.slots ?? [];
+    this.validateSlots(slots);
+    if (slots.length === 0) {
+      throw new BadRequestException('Marca al menos un día y de qué hora a qué hora puedes ayudar');
+    }
+    const helpType = dto.helpType;
+    if (helpType === TimeVolunteerHelpType.TRANSPORTE && !dto.vehicleType) {
+      throw new BadRequestException('Indica si tienes moto, carro u otro vehículo');
+    }
     await this.ensureTables();
+    const vehicleType = helpType === TimeVolunteerHelpType.TRANSPORTE ? (dto.vehicleType ?? null) : null;
     const saved = await this.volunteersRepository.save(
       this.volunteersRepository.create({
         fullName: dto.fullName.trim(),
         phone: dto.phone.trim(),
         email: dto.email?.trim() ? dto.email.trim() : null,
         notes: dto.notes?.trim() ? dto.notes.trim() : null,
+        helpType,
+        hasVehicle: helpType === TimeVolunteerHelpType.TRANSPORTE,
+        vehicleType,
+        vehicleInfo:
+          helpType === TimeVolunteerHelpType.TRANSPORTE && dto.vehicleInfo?.trim()
+            ? dto.vehicleInfo.trim()
+            : null,
         status: TimeVolunteerStatus.NUEVO,
       }),
     );
-    await this.slotsRepository.save(
-      dto.slots.map((slot) =>
-        this.slotsRepository.create({
-          volunteerId: saved.id,
-          weekday: slot.weekday,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-        }),
-      ),
-    );
+    if (slots.length > 0) {
+      await this.slotsRepository.save(
+        slots.map((slot) =>
+          this.slotsRepository.create({
+            volunteerId: saved.id,
+            weekday: slot.weekday,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+          }),
+        ),
+      );
+    }
     return this.toPublic(await this.findEntity(saved.id));
   }
 
@@ -153,6 +221,14 @@ export class TimeVolunteersService implements OnModuleInit {
       if (message.includes('does not exist') || message.includes("doesn't exist")) {
         await this.ensureTables();
         return [];
+      }
+      if (message.includes('Unknown column') || message.includes('no such column')) {
+        await this.ensureTables();
+        const list = await this.volunteersRepository.find({
+          relations: { slots: true },
+          order: { createdAt: 'DESC' },
+        });
+        return list.map((item) => this.toPublic(item));
       }
       throw err;
     }

@@ -1,8 +1,8 @@
 import { Transform, Type } from 'class-transformer';
 import {
-  ArrayMinSize,
   IsArray,
   IsEmail,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -13,6 +13,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { TimeVolunteerHelpType, VehicleKind } from '../../common/enums.js';
 
 const emptyToUndefined = ({ value }: { value: unknown }) =>
   value === '' || value === null || value === undefined ? undefined : value;
@@ -60,15 +61,28 @@ export class CreateTimeVolunteerDto {
   @MaxLength(150)
   email?: string;
 
+  @IsIn(Object.values(TimeVolunteerHelpType))
+  helpType: TimeVolunteerHelpType;
+
+  @IsOptional()
+  @IsIn(Object.values(VehicleKind))
+  vehicleType?: VehicleKind;
+
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsString()
+  @MaxLength(200)
+  vehicleInfo?: string;
+
   @IsOptional()
   @Transform(emptyToUndefined)
   @IsString()
   @MaxLength(1000)
   notes?: string;
 
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1, { message: 'Marca al menos un día y un horario' })
   @ValidateNested({ each: true })
   @Type(() => TimeVolunteerSlotDto)
-  slots: TimeVolunteerSlotDto[];
+  slots?: TimeVolunteerSlotDto[];
 }

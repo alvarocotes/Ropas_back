@@ -24,7 +24,19 @@ export enum DonationStatus {
   CANCELADO = 'cancelado',
 }
 
-/** Persona del público que se ofrece a ayudar con tiempo. */
+/** Cómo se ofrece a ayudar quien se registra en público. */
+export enum TimeVolunteerHelpType {
+  SEDE = 'sede',
+  TRANSPORTE = 'transporte',
+}
+
+export enum VehicleKind {
+  MOTO = 'moto',
+  CARRO = 'carro',
+  CAMIONETA = 'camioneta',
+  OTRO = 'otro',
+}
+
 export enum TimeVolunteerStatus {
   NUEVO = 'nuevo',
   CONTACTADO = 'contactado',
