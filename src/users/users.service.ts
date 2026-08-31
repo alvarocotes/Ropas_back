@@ -14,8 +14,7 @@ import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
-import { User } from './user.entity.js';
-import { VolunteerAvailability } from './volunteer-availability.entity.js';
+import { User, VolunteerAvailability } from './user.entity.js';
 
 export type AvailabilitySlot = {
   weekday: number;

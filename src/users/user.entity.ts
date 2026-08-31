@@ -2,12 +2,38 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { UserRole } from '../common/enums.js';
-import { VolunteerAvailability } from './volunteer-availability.entity.js';
+
+/** Un tramo horario del voluntario para un día de la semana (1 = lunes … 7 = domingo). */
+@Entity('volunteer_availabilities')
+@Index(['userId', 'weekday'], { unique: true })
+export class VolunteerAvailability {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ name: 'user_id' })
+  userId: number;
+
+  @ManyToOne('User', 'availability', { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
+  user: object;
+
+  @Column({ type: 'int' })
+  weekday: number;
+
+  @Column({ name: 'start_time', type: 'varchar', length: 5 })
+  startTime: string;
+
+  @Column({ name: 'end_time', type: 'varchar', length: 5 })
+  endTime: string;
+}
 
 @Entity('users')
 export class User {
