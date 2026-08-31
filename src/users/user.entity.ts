@@ -35,6 +35,31 @@ export class VolunteerAvailability {
   endTime: string;
 }
 
+/** Un turno de asistencia en una fecha concreta (admin, recepción o voluntario). */
+@Entity('user_attendances')
+@Index(['userId', 'workDate', 'startTime'], { unique: true })
+export class UserAttendance {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ name: 'user_id' })
+  userId: number;
+
+  @ManyToOne('User', 'attendances', { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
+  user: object;
+
+  /** Fecha local YYYY-MM-DD, sin zona horaria. */
+  @Column({ name: 'work_date', type: 'varchar', length: 10 })
+  workDate: string;
+
+  @Column({ name: 'start_time', type: 'varchar', length: 5 })
+  startTime: string;
+
+  @Column({ name: 'end_time', type: 'varchar', length: 5 })
+  endTime: string;
+}
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
@@ -60,6 +85,9 @@ export class User {
 
   @OneToMany(() => VolunteerAvailability, (slot) => slot.user)
   availability: VolunteerAvailability[];
+
+  @OneToMany(() => UserAttendance, (row) => row.user)
+  attendances: UserAttendance[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

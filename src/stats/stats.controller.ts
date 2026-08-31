@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator.js';
 import { UsersService } from '../users/users.service.js';
 
@@ -15,5 +15,11 @@ export class StatsController {
   @Get('volunteer-schedule')
   volunteerSchedule() {
     return this.usersService.findVolunteerSchedule();
+  }
+
+  /** Quién asiste un día concreto. El cliente debe mandar la fecha local YYYY-MM-DD. */
+  @Get('staff-attendance')
+  staffAttendance(@Query('date') date?: string) {
+    return this.usersService.findAttendanceForDate(date);
   }
 }

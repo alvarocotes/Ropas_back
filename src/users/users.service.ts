@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
   OnModuleInit,
@@ -10,11 +9,12 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { In, Repository } from 'typeorm';
 import { UserRole } from '../common/enums.js';
+import { CreateAttendanceDto } from './dto/create-attendance.dto.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
-import { User, VolunteerAvailability } from './user.entity.js';
+import { User, UserAttendance, VolunteerAvailability } from './user.entity.js';
 
 export type AvailabilitySlot = {
   weekday: number;
@@ -22,8 +22,16 @@ export type AvailabilitySlot = {
   endTime: string;
 };
 
-export type SafeUser = Omit<User, 'passwordHash' | 'availability'> & {
+export type AttendanceRecord = {
+  id: number;
+  date: string;
+  startTime: string;
+  endTime: string;
+};
+
+export type SafeUser = Omit<User, 'passwordHash' | 'availability' | 'attendances'> & {
   availability: AvailabilitySlot[];
+  attendances: AttendanceRecord[];
 };
 
 @Injectable()
@@ -33,11 +41,14 @@ export class UsersService implements OnModuleInit {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(VolunteerAvailability)
     private readonly availabilityRepository: Repository<VolunteerAvailability>,
+    @InjectRepository(UserAttendance)
+    private readonly attendanceRepository: Repository<UserAttendance>,
     private readonly configService: ConfigService,
   ) {}
 
   async onModuleInit(): Promise<void> {
     await this.ensureAvailabilityTable();
+    await this.ensureAttendanceTable();
     // Solo con SEED_ON_START=true: en serverless este chequeo se pagaría en
     // cada arranque en frío, antes de responder la primera petición.
     if (this.configService.get<string>('SEED_ON_START', 'false') === 'true') {
@@ -81,11 +92,48 @@ export class UsersService implements OnModuleInit {
     }
   }
 
-  toSafe(user: User, slots?: VolunteerAvailability[]): SafeUser {
-    const { passwordHash: _passwordHash, availability, ...safe } = user;
+  private async ensureAttendanceTable(): Promise<void> {
+    const dbType = this.configService.get<string>('DB_TYPE', 'sqlite');
+    try {
+      if (dbType === 'mysql') {
+        await this.attendanceRepository.query(`
+          CREATE TABLE IF NOT EXISTS user_attendances (
+            id INT NOT NULL AUTO_INCREMENT,
+            user_id INT NOT NULL,
+            work_date VARCHAR(10) NOT NULL,
+            start_time VARCHAR(5) NOT NULL,
+            end_time VARCHAR(5) NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY IDX_att_user_date_start (user_id, work_date, start_time)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+      } else {
+        await this.attendanceRepository.query(`
+          CREATE TABLE IF NOT EXISTS user_attendances (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            work_date VARCHAR(10) NOT NULL,
+            start_time VARCHAR(5) NOT NULL,
+            end_time VARCHAR(5) NOT NULL,
+            UNIQUE (user_id, work_date, start_time)
+          )
+        `);
+      }
+    } catch (err) {
+      console.error('No se pudo asegurar la tabla user_attendances:', err);
+    }
+  }
+
+  toSafe(
+    user: User,
+    slots?: VolunteerAvailability[],
+    attendances?: UserAttendance[],
+  ): SafeUser {
+    const { passwordHash: _passwordHash, availability, attendances: _att, ...safe } = user;
     return {
       ...safe,
       availability: this.serializeAvailability(slots ?? availability),
+      attendances: this.serializeAttendances(attendances),
     };
   }
 
@@ -97,6 +145,18 @@ export class UsersService implements OnModuleInit {
         weekday: slot.weekday,
         startTime: slot.startTime,
         endTime: slot.endTime,
+      }));
+  }
+
+  serializeAttendances(rows?: UserAttendance[]): AttendanceRecord[] {
+    return (rows ?? [])
+      .slice()
+      .sort((a, b) => a.workDate.localeCompare(b.workDate) || a.startTime.localeCompare(b.startTime))
+      .map((row) => ({
+        id: row.id,
+        date: row.workDate,
+        startTime: row.startTime,
+        endTime: row.endTime,
       }));
   }
 
@@ -118,6 +178,28 @@ export class UsersService implements OnModuleInit {
       }
     } catch (err) {
       console.error('No se pudieron leer los horarios de voluntarios:', err);
+    }
+    return map;
+  }
+
+  private async loadAttendancesByUserIds(
+    userIds: number[],
+  ): Promise<Map<number, UserAttendance[]>> {
+    const map = new Map<number, UserAttendance[]>();
+    if (userIds.length === 0) {
+      return map;
+    }
+    try {
+      const rows = await this.attendanceRepository.find({
+        where: { userId: In(userIds) },
+      });
+      for (const row of rows) {
+        const list = map.get(row.userId) ?? [];
+        list.push(row);
+        map.set(row.userId, list);
+      }
+    } catch (err) {
+      console.error('No se pudieron leer las asistencias por fecha:', err);
     }
     return map;
   }
@@ -158,7 +240,8 @@ export class UsersService implements OnModuleInit {
       throw new NotFoundException('Usuario no encontrado');
     }
     const slots = await this.loadSlotsByUserIds([id]);
-    return this.toSafe(user, slots.get(id) ?? []);
+    const attendances = await this.loadAttendancesByUserIds([id]);
+    return this.toSafe(user, slots.get(id) ?? [], attendances.get(id) ?? []);
   }
 
   async countActiveVolunteers(): Promise<number> {
@@ -170,7 +253,10 @@ export class UsersService implements OnModuleInit {
   async findAll(): Promise<SafeUser[]> {
     const users = await this.usersRepository.find({ order: { createdAt: 'DESC' } });
     const slots = await this.loadSlotsByUserIds(users.map((user) => user.id));
-    return users.map((user) => this.toSafe(user, slots.get(user.id) ?? []));
+    const attendances = await this.loadAttendancesByUserIds(users.map((user) => user.id));
+    return users.map((user) =>
+      this.toSafe(user, slots.get(user.id) ?? [], attendances.get(user.id) ?? []),
+    );
   }
 
   async findVolunteerSchedule(): Promise<
@@ -186,6 +272,101 @@ export class UsersService implements OnModuleInit {
       fullName: user.fullName,
       availability: this.serializeAvailability(slots.get(user.id) ?? []),
     }));
+  }
+
+  async listAttendance(userId: number): Promise<AttendanceRecord[]> {
+    await this.ensureAttendanceTable();
+    const rows = await this.loadAttendancesByUserIds([userId]);
+    return this.serializeAttendances(rows.get(userId) ?? []);
+  }
+
+  async addAttendance(userId: number, dto: CreateAttendanceDto): Promise<AttendanceRecord[]> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+    if (!isValidIsoDate(dto.date)) {
+      throw new BadRequestException('La fecha no es válida');
+    }
+    if (dto.startTime >= dto.endTime) {
+      throw new BadRequestException('La hora de salida debe ser posterior a la de entrada');
+    }
+    await this.ensureAttendanceTable();
+    const exists = await this.attendanceRepository.findOne({
+      where: { userId, workDate: dto.date, startTime: dto.startTime },
+    });
+    if (exists) {
+      throw new BadRequestException('Ya registraste ese horario en esa fecha');
+    }
+    await this.attendanceRepository.save(
+      this.attendanceRepository.create({
+        userId,
+        workDate: dto.date,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+      }),
+    );
+    return this.listAttendance(userId);
+  }
+
+  async removeAttendance(userId: number, attendanceId: number): Promise<AttendanceRecord[]> {
+    await this.ensureAttendanceTable();
+    const row = await this.attendanceRepository.findOne({
+      where: { id: attendanceId, userId },
+    });
+    if (!row) {
+      throw new NotFoundException('Ese registro de horario no existe');
+    }
+    await this.attendanceRepository.remove(row);
+    return this.listAttendance(userId);
+  }
+
+  async findAttendanceForDate(date?: string): Promise<
+    {
+      id: number;
+      userId: number;
+      fullName: string;
+      role: UserRole;
+      date: string;
+      startTime: string;
+      endTime: string;
+    }[]
+  > {
+    const workDate = date && isValidIsoDate(date) ? date : todayBogota();
+    await this.ensureAttendanceTable();
+    let rows: UserAttendance[] = [];
+    try {
+      rows = await this.attendanceRepository.find({ where: { workDate } });
+    } catch (err) {
+      console.error('No se pudieron leer las asistencias por fecha:', err);
+      return [];
+    }
+    if (rows.length === 0) {
+      return [];
+    }
+    const users = await this.usersRepository.find({
+      where: { id: In(rows.map((row) => row.userId)), isActive: true },
+    });
+    const byId = new Map(users.map((user) => [user.id, user]));
+    return rows
+      .filter((row) => byId.has(row.userId))
+      .sort((a, b) => {
+        const time = a.startTime.localeCompare(b.startTime);
+        if (time !== 0) return time;
+        return byId.get(a.userId)!.fullName.localeCompare(byId.get(b.userId)!.fullName, 'es');
+      })
+      .map((row) => {
+        const user = byId.get(row.userId)!;
+        return {
+          id: row.id,
+          userId: row.userId,
+          fullName: user.fullName,
+          role: user.role,
+          date: row.workDate,
+          startTime: row.startTime,
+          endTime: row.endTime,
+        };
+      });
   }
 
   async create(dto: CreateUserDto): Promise<SafeUser> {
@@ -231,13 +412,6 @@ export class UsersService implements OnModuleInit {
     if (dto.isActive !== undefined) user.isActive = dto.isActive;
     if (dto.role !== undefined) {
       user.role = dto.role;
-      if (dto.role !== UserRole.VOLUNTEER) {
-        try {
-          await this.availabilityRepository.delete({ userId: user.id });
-        } catch (err) {
-          console.error('No se pudieron borrar horarios al cambiar el rol:', err);
-        }
-      }
     }
     if (dto.password) {
       user.passwordHash = await bcrypt.hash(dto.password, 10);
@@ -281,9 +455,6 @@ export class UsersService implements OnModuleInit {
     const user = await this.findById(id);
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
-    }
-    if (user.role !== UserRole.VOLUNTEER) {
-      throw new ForbiddenException('Solo los voluntarios registran horario semanal');
     }
     const weekdays = new Set<number>();
     for (const slot of slots) {
@@ -346,4 +517,21 @@ export class UsersService implements OnModuleInit {
       throw new BadRequestException('Debe quedar al menos un administrador activo');
     }
   }
+}
+
+function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function todayBogota(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
 }
