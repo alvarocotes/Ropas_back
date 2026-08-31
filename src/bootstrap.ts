@@ -33,13 +33,13 @@ export async function createApp() {
     }
     next();
   });
-  // Acepta peticiones desde cualquier origen: la API se autentica con el token
-  // JWT en la cabecera Authorization, no con cookies de sesión.
+  // Cualquier origen. El JWT va en Authorization; no hay cookies de sesión,
+  // así que credentials queda en false y se puede usar '*'.
   app.enableCors({
-    origin: true,
-    credentials: true,
+    origin: '*',
+    credentials: false,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
   });
   app.useGlobalPipes(
     new ValidationPipe({
