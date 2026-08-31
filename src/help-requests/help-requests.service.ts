@@ -3,7 +3,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MovementType, RequestStatus, UserRole } from '../common/enums.js';
@@ -33,14 +35,50 @@ const ALLOWED_STATUSES: Record<UserRole, RequestStatus[]> = {
 };
 
 @Injectable()
-export class HelpRequestsService {
+export class HelpRequestsService implements OnModuleInit {
   constructor(
     @InjectRepository(HelpRequest)
     private readonly requestsRepository: Repository<HelpRequest>,
     @InjectRepository(HelpRequestItem)
     private readonly itemsRepository: Repository<HelpRequestItem>,
     private readonly inventoryService: InventoryService,
+    private readonly configService: ConfigService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.ensureDiaperStageColumn();
+  }
+
+  /**
+   * El campo de etapa de pañal es nuevo. Con DB_SYNC=false (producción) TypeORM
+   * no altera tablas y GET /help-requests cae con "Unknown column 'diaper_stage'".
+   */
+  private async ensureDiaperStageColumn(): Promise<void> {
+    const dbType = this.configService.get<string>('DB_TYPE', 'sqlite');
+    try {
+      if (dbType === 'mysql') {
+        const cols: Array<{ Field?: string }> = await this.requestsRepository.query(
+          `SHOW COLUMNS FROM help_requests LIKE 'diaper_stage'`,
+        );
+        if (!cols.length) {
+          await this.requestsRepository.query(
+            `ALTER TABLE help_requests ADD COLUMN diaper_stage VARCHAR(200) NULL`,
+          );
+        }
+      } else {
+        const cols: Array<{ name: string }> = await this.requestsRepository.query(
+          `PRAGMA table_info(help_requests)`,
+        );
+        if (!cols.some((col) => col.name === 'diaper_stage')) {
+          await this.requestsRepository.query(
+            `ALTER TABLE help_requests ADD COLUMN diaper_stage VARCHAR(200)`,
+          );
+        }
+      }
+    } catch (err) {
+      console.error('No se pudo asegurar la columna diaper_stage:', err);
+    }
+  }
 
   private readonly relations = {
     assignedTo: true,
@@ -61,11 +99,24 @@ export class HelpRequestsService {
   }
 
   async findAll() {
-    const requests = await this.requestsRepository.find({
-      relations: this.relations,
-      order: { createdAt: 'DESC' },
-    });
-    return requests.map((request) => this.toPublicShape(request));
+    try {
+      const requests = await this.requestsRepository.find({
+        relations: this.relations,
+        order: { createdAt: 'DESC' },
+      });
+      return requests.map((request) => this.toPublicShape(request));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      if (message.includes('diaper_stage') || message.includes('Unknown column')) {
+        await this.ensureDiaperStageColumn();
+        const requests = await this.requestsRepository.find({
+          relations: this.relations,
+          order: { createdAt: 'DESC' },
+        });
+        return requests.map((request) => this.toPublicShape(request));
+      }
+      throw err;
+    }
   }
 
   async findOne(id: number) {
