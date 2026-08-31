@@ -16,11 +16,17 @@ import { UsersModule } from './users/users.module.js';
 import { HealthController } from './health.controller.js';
 
 function databaseOptions(config: ConfigService): TypeOrmModuleOptions {
-  const dbType = config.get<string>('DB_TYPE', 'sqlite');
+  const onVercel = Boolean(process.env.VERCEL);
+  const dbType = config.get<string>('DB_TYPE', onVercel ? 'mysql' : 'sqlite');
+  if (onVercel && dbType !== 'mysql') {
+    throw new Error('En Vercel hay que definir DB_TYPE=mysql');
+  }
   if (dbType === 'mysql') {
+    const host = config.get<string>('DB_HOST', 'localhost');
+    const remote = host !== 'localhost' && host !== '127.0.0.1';
     return {
       type: 'mysql',
-      host: config.get<string>('DB_HOST', 'localhost'),
+      host,
       port: Number(config.get('DB_PORT', 3306)),
       username: config.get<string>('DB_USER', 'root'),
       password: config.get<string>('DB_PASSWORD', ''),
@@ -31,11 +37,13 @@ function databaseOptions(config: ConfigService): TypeOrmModuleOptions {
       synchronize: config.get<string>('DB_SYNC', 'false') === 'true',
       charset: 'utf8mb4',
       driver: mysql2,
+      // Hostinger y otros MySQL remotos suelen exigir TLS desde Vercel.
+      ssl: remote ? { rejectUnauthorized: false } : undefined,
       // Fallar rápido en lugar de reintentar diez veces y agotar el tiempo de la función.
       retryAttempts: 2,
       retryDelay: 1000,
       // Un MySQL compartido tiene pocas conexiones y cada instancia abre su propio pool.
-      extra: { connectionLimit: 3 },
+      extra: { connectionLimit: 3, connectTimeout: 10000 },
     };
   }
   return {

@@ -80,6 +80,10 @@ export class HelpRequest {
   @Column({ name: 'needs_diapers', type: 'boolean', default: false })
   needsDiapers: boolean;
 
+  /** Etapas de pañal pedidas (p. ej. "Etapa 1, Etapa 3"), si needsDiapers es true. */
+  @Column({ name: 'diaper_stage', type: 'varchar', length: 200, nullable: true })
+  diaperStage: string | null;
+
   @Column({ name: 'needs_sanitary', type: 'boolean', default: false })
   needsSanitary: boolean;
 

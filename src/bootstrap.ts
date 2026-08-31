@@ -35,7 +35,12 @@ export async function createApp() {
   });
   // Acepta peticiones desde cualquier origen: la API se autentica con el token
   // JWT en la cabecera Authorization, no con cookies de sesión.
-  app.enableCors({ origin: true, credentials: true });
+  app.enableCors({
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

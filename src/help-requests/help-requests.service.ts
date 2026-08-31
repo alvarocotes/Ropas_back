@@ -82,7 +82,7 @@ export class HelpRequestsService {
   create(dto: CreateHelpRequestDto) {
     const request = this.requestsRepository.create({
       fullName: dto.fullName,
-      identificationNumber: dto.identificationNumber,
+      identificationNumber: dto.identificationNumber ?? '',
       residenceBefore: dto.residenceBefore,
       residenceAfter: dto.residenceAfter,
       phoneWhatsapp: dto.phoneWhatsapp,
@@ -102,6 +102,7 @@ export class HelpRequestsService {
       underwearNeeds: dto.underwearNeeds ?? null,
       needsLinens: dto.needsLinens,
       needsDiapers: dto.needsDiapers,
+      diaperStage: dto.needsDiapers ? (dto.diaperStage ?? null) : null,
       needsSanitary: dto.needsSanitary,
       additionalNeeds: dto.additionalNeeds ?? null,
       status: RequestStatus.RECIBIDO,

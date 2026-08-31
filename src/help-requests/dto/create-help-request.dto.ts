@@ -19,10 +19,11 @@ export class CreateHelpRequestDto {
   @MaxLength(150)
   fullName: string;
 
+  @IsOptional()
+  @Transform(emptyToUndefined)
   @IsString()
-  @MinLength(4)
   @MaxLength(40)
-  identificationNumber: string;
+  identificationNumber?: string;
 
   @IsString()
   @MinLength(3)
@@ -119,6 +120,12 @@ export class CreateHelpRequestDto {
 
   @IsBoolean()
   needsDiapers: boolean;
+
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsString()
+  @MaxLength(200)
+  diaperStage?: string;
 
   @IsBoolean()
   needsSanitary: boolean;
