@@ -11,4 +11,9 @@ export class StatsController {
   async volunteersCount() {
     return { count: await this.usersService.countActiveVolunteers() };
   }
+
+  @Get('volunteer-schedule')
+  volunteerSchedule() {
+    return this.usersService.findVolunteerSchedule();
+  }
 }

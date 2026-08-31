@@ -2,10 +2,12 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { UserRole } from '../common/enums.js';
+import { VolunteerAvailability } from './volunteer-availability.entity.js';
 
 @Entity('users')
 export class User {
@@ -29,6 +31,9 @@ export class User {
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
+
+  @OneToMany(() => VolunteerAvailability, (slot) => slot.user)
+  availability: VolunteerAvailability[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
