@@ -23,3 +23,11 @@ export enum DonationStatus {
   INGRESADO = 'ingresado',
   CANCELADO = 'cancelado',
 }
+
+/** Persona del público que se ofrece a ayudar con tiempo. */
+export enum TimeVolunteerStatus {
+  NUEVO = 'nuevo',
+  CONTACTADO = 'contactado',
+  CONFIRMADO = 'confirmado',
+  NO_DISPONIBLE = 'no_disponible',
+}

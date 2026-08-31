@@ -1,10 +1,11 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -48,9 +49,46 @@ export class CreateHelpRequestDto {
   @IsIn(['familiar', 'comunidad'])
   clothingScope: 'familiar' | 'comunidad';
 
+  @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
-  peopleCount: number;
+  peopleCount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(200)
+  womenCount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(200)
+  menCount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(200)
+  girlsCount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(200)
+  boysCount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(200)
+  babiesCount?: number;
 
   @IsBoolean()
   hasOwnTransport: boolean;

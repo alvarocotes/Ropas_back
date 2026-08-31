@@ -46,37 +46,56 @@ export class HelpRequestsService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.ensureDiaperStageColumn();
+    await this.ensureHelpRequestColumns();
   }
 
   /**
-   * El campo de etapa de pañal es nuevo. Con DB_SYNC=false (producción) TypeORM
-   * no altera tablas y GET /help-requests cae con "Unknown column 'diaper_stage'".
+   * Columnas añadidas después del primer deploy. Con DB_SYNC=false (producción)
+   * TypeORM no las crea y GET /help-requests cae con "Unknown column".
    */
-  private async ensureDiaperStageColumn(): Promise<void> {
+  private async ensureHelpRequestColumns(): Promise<void> {
     const dbType = this.configService.get<string>('DB_TYPE', 'sqlite');
+    const columns =
+      dbType === 'mysql'
+        ? [
+            { name: 'diaper_stage', sql: 'VARCHAR(200) NULL' },
+            { name: 'women_count', sql: 'INT NOT NULL DEFAULT 0' },
+            { name: 'men_count', sql: 'INT NOT NULL DEFAULT 0' },
+            { name: 'girls_count', sql: 'INT NOT NULL DEFAULT 0' },
+            { name: 'boys_count', sql: 'INT NOT NULL DEFAULT 0' },
+            { name: 'babies_count', sql: 'INT NOT NULL DEFAULT 0' },
+          ]
+        : [
+            { name: 'diaper_stage', sql: 'VARCHAR(200)' },
+            { name: 'women_count', sql: 'INTEGER NOT NULL DEFAULT 0' },
+            { name: 'men_count', sql: 'INTEGER NOT NULL DEFAULT 0' },
+            { name: 'girls_count', sql: 'INTEGER NOT NULL DEFAULT 0' },
+            { name: 'boys_count', sql: 'INTEGER NOT NULL DEFAULT 0' },
+            { name: 'babies_count', sql: 'INTEGER NOT NULL DEFAULT 0' },
+          ];
     try {
+      const existing = new Set<string>();
       if (dbType === 'mysql') {
-        const cols: Array<{ Field?: string }> = await this.requestsRepository.query(
-          `SHOW COLUMNS FROM help_requests LIKE 'diaper_stage'`,
+        const rows: Array<{ Field?: string }> = await this.requestsRepository.query(
+          'SHOW COLUMNS FROM help_requests',
         );
-        if (!cols.length) {
-          await this.requestsRepository.query(
-            `ALTER TABLE help_requests ADD COLUMN diaper_stage VARCHAR(200) NULL`,
-          );
+        for (const row of rows) {
+          if (row.Field) existing.add(row.Field);
         }
       } else {
-        const cols: Array<{ name: string }> = await this.requestsRepository.query(
-          `PRAGMA table_info(help_requests)`,
+        const rows: Array<{ name: string }> = await this.requestsRepository.query(
+          'PRAGMA table_info(help_requests)',
         );
-        if (!cols.some((col) => col.name === 'diaper_stage')) {
-          await this.requestsRepository.query(
-            `ALTER TABLE help_requests ADD COLUMN diaper_stage VARCHAR(200)`,
-          );
-        }
+        for (const row of rows) existing.add(row.name);
+      }
+      for (const column of columns) {
+        if (existing.has(column.name)) continue;
+        await this.requestsRepository.query(
+          `ALTER TABLE help_requests ADD COLUMN ${column.name} ${column.sql}`,
+        );
       }
     } catch (err) {
-      console.error('No se pudo asegurar la columna diaper_stage:', err);
+      console.error('No se pudieron asegurar columnas de help_requests:', err);
     }
   }
 
@@ -107,8 +126,8 @@ export class HelpRequestsService implements OnModuleInit {
       return requests.map((request) => this.toPublicShape(request));
     } catch (err) {
       const message = err instanceof Error ? err.message : '';
-      if (message.includes('diaper_stage') || message.includes('Unknown column')) {
-        await this.ensureDiaperStageColumn();
+      if (message.includes('Unknown column') || message.includes('no such column')) {
+        await this.ensureHelpRequestColumns();
         const requests = await this.requestsRepository.find({
           relations: this.relations,
           order: { createdAt: 'DESC' },
@@ -131,6 +150,7 @@ export class HelpRequestsService implements OnModuleInit {
   }
 
   create(dto: CreateHelpRequestDto) {
+    const household = this.householdFromDto(dto);
     const request = this.requestsRepository.create({
       fullName: dto.fullName,
       identificationNumber: dto.identificationNumber ?? '',
@@ -139,7 +159,12 @@ export class HelpRequestsService implements OnModuleInit {
       phoneWhatsapp: dto.phoneWhatsapp,
       affectationType: dto.affectationType,
       clothingScope: dto.clothingScope,
-      peopleCount: dto.peopleCount,
+      peopleCount: household.peopleCount,
+      womenCount: household.womenCount,
+      menCount: household.menCount,
+      girlsCount: household.girlsCount,
+      boysCount: household.boysCount,
+      babiesCount: household.babiesCount,
       hasOwnTransport: dto.hasOwnTransport,
       babySizes: dto.babySizes ?? null,
       girlShirtSizes: dto.girlShirtSizes ?? null,
@@ -367,6 +392,22 @@ export class HelpRequestsService implements OnModuleInit {
 
     await this.requestsRepository.save(request);
     return this.toPublicShape(await this.findOne(id));
+  }
+
+  private householdFromDto(dto: CreateHelpRequestDto) {
+    const womenCount = dto.womenCount ?? 0;
+    const menCount = dto.menCount ?? 0;
+    const girlsCount = dto.girlsCount ?? 0;
+    const boysCount = dto.boysCount ?? 0;
+    const babiesCount = dto.babiesCount ?? 0;
+    const breakdown = womenCount + menCount + girlsCount + boysCount + babiesCount;
+    const peopleCount = breakdown > 0 ? breakdown : (dto.peopleCount ?? 0);
+    if (peopleCount < 1) {
+      throw new BadRequestException(
+        'Indica cuántas mujeres, hombres, niñas, niños y bebés necesitan ropa',
+      );
+    }
+    return { peopleCount, womenCount, menCount, girlsCount, boysCount, babiesCount };
   }
 
   private isClosed(request: HelpRequest) {

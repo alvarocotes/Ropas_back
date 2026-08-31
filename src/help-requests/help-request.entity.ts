@@ -41,6 +41,21 @@ export class HelpRequest {
   @Column({ name: 'people_count', type: 'int', default: 1 })
   peopleCount: number;
 
+  @Column({ name: 'women_count', type: 'int', default: 0 })
+  womenCount: number;
+
+  @Column({ name: 'men_count', type: 'int', default: 0 })
+  menCount: number;
+
+  @Column({ name: 'girls_count', type: 'int', default: 0 })
+  girlsCount: number;
+
+  @Column({ name: 'boys_count', type: 'int', default: 0 })
+  boysCount: number;
+
+  @Column({ name: 'babies_count', type: 'int', default: 0 })
+  babiesCount: number;
+
   @Column({ name: 'has_own_transport', type: 'boolean', default: false })
   hasOwnTransport: boolean;
 
