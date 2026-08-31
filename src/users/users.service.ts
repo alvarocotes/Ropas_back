@@ -8,7 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { UserRole } from '../common/enums.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto.js';
@@ -37,6 +37,7 @@ export class UsersService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    await this.ensureAvailabilityTable();
     // Solo con SEED_ON_START=true: en serverless este chequeo se pagaría en
     // cada arranque en frío, antes de responder la primera petición.
     if (this.configService.get<string>('SEED_ON_START', 'false') === 'true') {
@@ -44,11 +45,47 @@ export class UsersService implements OnModuleInit {
     }
   }
 
-  toSafe(user: User): SafeUser {
+  /**
+   * La tabla de horarios es nueva. Si DB_SYNC está en false (producción) no se
+   * crea sola y GET /users reventaría al hacer el join. Se crea aquí si falta.
+   */
+  private async ensureAvailabilityTable(): Promise<void> {
+    const dbType = this.configService.get<string>('DB_TYPE', 'sqlite');
+    try {
+      if (dbType === 'mysql') {
+        await this.availabilityRepository.query(`
+          CREATE TABLE IF NOT EXISTS volunteer_availabilities (
+            id INT NOT NULL AUTO_INCREMENT,
+            user_id INT NOT NULL,
+            weekday INT NOT NULL,
+            start_time VARCHAR(5) NOT NULL,
+            end_time VARCHAR(5) NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY IDX_avail_user_weekday (user_id, weekday)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+      } else {
+        await this.availabilityRepository.query(`
+          CREATE TABLE IF NOT EXISTS volunteer_availabilities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            weekday INTEGER NOT NULL,
+            start_time VARCHAR(5) NOT NULL,
+            end_time VARCHAR(5) NOT NULL,
+            UNIQUE (user_id, weekday)
+          )
+        `);
+      }
+    } catch (err) {
+      console.error('No se pudo asegurar la tabla volunteer_availabilities:', err);
+    }
+  }
+
+  toSafe(user: User, slots?: VolunteerAvailability[]): SafeUser {
     const { passwordHash: _passwordHash, availability, ...safe } = user;
     return {
       ...safe,
-      availability: this.serializeAvailability(availability),
+      availability: this.serializeAvailability(slots ?? availability),
     };
   }
 
@@ -61,6 +98,28 @@ export class UsersService implements OnModuleInit {
         startTime: slot.startTime,
         endTime: slot.endTime,
       }));
+  }
+
+  private async loadSlotsByUserIds(
+    userIds: number[],
+  ): Promise<Map<number, VolunteerAvailability[]>> {
+    const map = new Map<number, VolunteerAvailability[]>();
+    if (userIds.length === 0) {
+      return map;
+    }
+    try {
+      const slots = await this.availabilityRepository.find({
+        where: { userId: In(userIds) },
+      });
+      for (const slot of slots) {
+        const list = map.get(slot.userId) ?? [];
+        list.push(slot);
+        map.set(slot.userId, list);
+      }
+    } catch (err) {
+      console.error('No se pudieron leer los horarios de voluntarios:', err);
+    }
+    return map;
   }
 
   async seedAdmin(): Promise<void> {
@@ -94,14 +153,12 @@ export class UsersService implements OnModuleInit {
   }
 
   async getProfile(id: number): Promise<SafeUser> {
-    const user = await this.usersRepository.findOne({
-      where: { id },
-      relations: { availability: true },
-    });
+    const user = await this.findById(id);
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
-    return this.toSafe(user);
+    const slots = await this.loadSlotsByUserIds([id]);
+    return this.toSafe(user, slots.get(id) ?? []);
   }
 
   async countActiveVolunteers(): Promise<number> {
@@ -111,11 +168,9 @@ export class UsersService implements OnModuleInit {
   }
 
   async findAll(): Promise<SafeUser[]> {
-    const users = await this.usersRepository.find({
-      relations: { availability: true },
-      order: { createdAt: 'DESC' },
-    });
-    return users.map((user) => this.toSafe(user));
+    const users = await this.usersRepository.find({ order: { createdAt: 'DESC' } });
+    const slots = await this.loadSlotsByUserIds(users.map((user) => user.id));
+    return users.map((user) => this.toSafe(user, slots.get(user.id) ?? []));
   }
 
   async findVolunteerSchedule(): Promise<
@@ -123,13 +178,13 @@ export class UsersService implements OnModuleInit {
   > {
     const volunteers = await this.usersRepository.find({
       where: { role: UserRole.VOLUNTEER, isActive: true },
-      relations: { availability: true },
       order: { fullName: 'ASC' },
     });
+    const slots = await this.loadSlotsByUserIds(volunteers.map((user) => user.id));
     return volunteers.map((user) => ({
       id: user.id,
       fullName: user.fullName,
-      availability: this.serializeAvailability(user.availability),
+      availability: this.serializeAvailability(slots.get(user.id) ?? []),
     }));
   }
 
@@ -149,13 +204,16 @@ export class UsersService implements OnModuleInit {
       isActive: true,
     });
     const saved = await this.usersRepository.save(user);
-    return this.toSafe(saved);
+    return this.toSafe(saved, []);
   }
 
-  async update(id: number, dto: UpdateUserDto): Promise<SafeUser> {
+  async update(id: number, dto: UpdateUserDto, actorId?: number): Promise<SafeUser> {
     const user = await this.findById(id);
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+    if (dto.isActive === false && actorId === id) {
+      throw new BadRequestException('No puedes desactivar tu propia cuenta');
     }
     if (dto.fullName !== undefined) user.fullName = dto.fullName;
     if (dto.phone !== undefined) user.phone = dto.phone;
@@ -163,14 +221,18 @@ export class UsersService implements OnModuleInit {
     if (dto.role !== undefined) {
       user.role = dto.role;
       if (dto.role !== UserRole.VOLUNTEER) {
-        await this.availabilityRepository.delete({ userId: user.id });
+        try {
+          await this.availabilityRepository.delete({ userId: user.id });
+        } catch (err) {
+          console.error('No se pudieron borrar horarios al cambiar el rol:', err);
+        }
       }
     }
     if (dto.password) {
       user.passwordHash = await bcrypt.hash(dto.password, 10);
     }
-    const saved = await this.usersRepository.save(user);
-    return this.getProfile(saved.id);
+    await this.usersRepository.save(user);
+    return this.getProfile(id);
   }
 
   async updateProfile(id: number, dto: UpdateProfileDto): Promise<SafeUser> {
@@ -224,6 +286,7 @@ export class UsersService implements OnModuleInit {
         );
       }
     }
+    await this.ensureAvailabilityTable();
     await this.availabilityRepository.delete({ userId: id });
     if (slots.length > 0) {
       await this.availabilityRepository.save(
@@ -237,18 +300,20 @@ export class UsersService implements OnModuleInit {
         ),
       );
     }
-    return this.serializeAvailability(
-      await this.availabilityRepository.find({ where: { userId: id } }),
-    );
+    const saved = await this.loadSlotsByUserIds([id]);
+    return this.serializeAvailability(saved.get(id) ?? []);
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: number, actorId?: number): Promise<void> {
     const user = await this.findById(id);
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
     if (user.role === UserRole.ADMIN) {
       throw new BadRequestException('No se puede eliminar al administrador');
+    }
+    if (actorId === id) {
+      throw new BadRequestException('No puedes desactivar tu propia cuenta');
     }
     user.isActive = false;
     await this.usersRepository.save(user);
