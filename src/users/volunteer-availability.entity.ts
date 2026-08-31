@@ -6,7 +6,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { User } from './user.entity.js';
+import type { User } from './user.entity.js';
 
 /** Un tramo horario del voluntario para un día de la semana (1 = lunes … 7 = domingo). */
 @Entity('volunteer_availabilities')
@@ -18,7 +18,9 @@ export class VolunteerAvailability {
   @Column({ name: 'user_id' })
   userId: number;
 
-  @ManyToOne(() => User, (user) => user.availability, { onDelete: 'CASCADE' })
+  // Nombre en string: evita el import circular ESM con User
+  // (Cannot access 'User' before initialization).
+  @ManyToOne('User', 'availability', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
