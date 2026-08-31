@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -48,8 +49,15 @@ export class InventoryController {
   updateProduct(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateProductDto,
+    @CurrentUser() user: SafeUser,
   ) {
-    return this.inventoryService.updateProduct(id, dto);
+    return this.inventoryService.updateProduct(id, dto, user.role);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Delete('products/:id')
+  removeProduct(@Param('id', ParseIntPipe) id: number) {
+    return this.inventoryService.removeProduct(id);
   }
 
   @Post('movements')

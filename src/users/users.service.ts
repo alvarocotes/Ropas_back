@@ -215,8 +215,19 @@ export class UsersService implements OnModuleInit {
     if (dto.isActive === false && actorId === id) {
       throw new BadRequestException('No puedes desactivar tu propia cuenta');
     }
+    if (dto.role !== undefined && actorId === id && dto.role !== user.role) {
+      throw new BadRequestException('No puedes cambiar tu propio rol');
+    }
+    await this.assertNotLastActiveAdmin(user, dto.role, dto.isActive);
+    if (dto.email !== undefined && dto.email !== user.email) {
+      const existing = await this.findByEmail(dto.email);
+      if (existing) {
+        throw new BadRequestException('Ya existe un usuario con ese correo');
+      }
+      user.email = dto.email;
+    }
     if (dto.fullName !== undefined) user.fullName = dto.fullName;
-    if (dto.phone !== undefined) user.phone = dto.phone;
+    if (dto.phone !== undefined) user.phone = dto.phone?.trim() ? dto.phone.trim() : null;
     if (dto.isActive !== undefined) user.isActive = dto.isActive;
     if (dto.role !== undefined) {
       user.role = dto.role;
@@ -309,13 +320,30 @@ export class UsersService implements OnModuleInit {
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
-    if (user.role === UserRole.ADMIN) {
-      throw new BadRequestException('No se puede eliminar al administrador');
-    }
     if (actorId === id) {
       throw new BadRequestException('No puedes desactivar tu propia cuenta');
     }
+    await this.assertNotLastActiveAdmin(user, undefined, false);
     user.isActive = false;
     await this.usersRepository.save(user);
+  }
+
+  /** No dejar el sistema sin un administrador activo. */
+  private async assertNotLastActiveAdmin(
+    user: User,
+    nextRole?: UserRole,
+    nextActive?: boolean,
+  ): Promise<void> {
+    const staysAdmin =
+      (nextRole ?? user.role) === UserRole.ADMIN && (nextActive ?? user.isActive) !== false;
+    if (staysAdmin || user.role !== UserRole.ADMIN || !user.isActive) {
+      return;
+    }
+    const admins = await this.usersRepository.count({
+      where: { role: UserRole.ADMIN, isActive: true },
+    });
+    if (admins <= 1) {
+      throw new BadRequestException('Debe quedar al menos un administrador activo');
+    }
   }
 }

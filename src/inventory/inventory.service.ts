@@ -1,11 +1,12 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { MovementType } from '../common/enums.js';
+import { MovementType, UserRole } from '../common/enums.js';
 import { CreateMovementDto } from './dto/create-movement.dto.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
@@ -23,7 +24,10 @@ export class InventoryService {
   ) {}
 
   findAll() {
-    return this.productsRepository.find({ order: { name: 'ASC' } });
+    return this.productsRepository.find({
+      where: { isActive: true },
+      order: { name: 'ASC' },
+    });
   }
 
   findAlerts() {
@@ -56,15 +60,33 @@ export class InventoryService {
     return this.productsRepository.save(product);
   }
 
-  async updateProduct(id: number, dto: UpdateProductDto) {
+  async updateProduct(id: number, dto: UpdateProductDto, actorRole: UserRole) {
     const product = await this.findOne(id);
-    if (dto.name !== undefined) product.name = dto.name;
-    if (dto.unit !== undefined) product.unit = dto.unit;
+    const catalogChange =
+      dto.name !== undefined || dto.unit !== undefined || dto.isActive !== undefined;
+    if (catalogChange && actorRole !== UserRole.ADMIN) {
+      throw new ForbiddenException('Solo el administrador edita o elimina productos');
+    }
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      if (name.length < 2) {
+        throw new BadRequestException('El nombre del producto debe tener al menos 2 caracteres');
+      }
+      product.name = name;
+    }
+    if (dto.unit !== undefined) product.unit = dto.unit.trim() || 'unidad';
     if (dto.minQuantity !== undefined) product.minQuantity = dto.minQuantity;
     if (dto.isActive !== undefined) product.isActive = dto.isActive;
     if (dto.publishWhenLow !== undefined) product.publishWhenLow = dto.publishWhenLow;
     if (dto.publicNote !== undefined) product.publicNote = dto.publicNote || null;
     return this.productsRepository.save(product);
+  }
+
+  async removeProduct(id: number) {
+    const product = await this.findOne(id);
+    product.isActive = false;
+    product.publishWhenLow = false;
+    await this.productsRepository.save(product);
   }
 
   async findMovements(productId?: number) {
