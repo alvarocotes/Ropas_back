@@ -36,9 +36,9 @@ export class DonationsService {
 
   create(dto: CreateDonationDto) {
     const donation = this.donationsRepository.create({
-      donorName: dto.donorName ?? null,
-      contact: dto.contact ?? null,
-      notes: dto.notes ?? null,
+      donorName: dto.donorName,
+      contact: dto.contact,
+      notes: dto.notes?.trim() ? dto.notes.trim() : null,
       status: DonationStatus.RECIBIDO,
       items: dto.items.map((item) =>
         this.itemsRepository.create({

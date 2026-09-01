@@ -1,13 +1,18 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
   IsInt,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
+
+const trim = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() : value;
 
 export class CreateDonationItemDto {
   @IsOptional()
@@ -27,16 +32,22 @@ export class CreateDonationItemDto {
 }
 
 export class CreateDonationDto {
-  @IsOptional()
+  @Transform(trim)
   @IsString()
-  donorName?: string;
+  @MinLength(2, { message: 'Escribe tu nombre' })
+  @MaxLength(120)
+  donorName: string;
+
+  @Transform(trim)
+  @IsString()
+  @MinLength(7, { message: 'Escribe un celular o correo de contacto' })
+  @MaxLength(120)
+  contact: string;
 
   @IsOptional()
+  @Transform(trim)
   @IsString()
-  contact?: string;
-
-  @IsOptional()
-  @IsString()
+  @MaxLength(500)
   notes?: string;
 
   @IsArray()
