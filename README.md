@@ -1,4 +1,4 @@
-API REST de ABRIGAR (NestJS).
+API REST de Entretejidos (NestJS).
 
 Instrucciones de arranque: ver el [README principal](../README.md).
 

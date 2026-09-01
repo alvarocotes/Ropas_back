@@ -18,7 +18,7 @@ const DEFAULT_SECTIONS: Array<Pick<AboutSection, 'sectionKey' | 'title' | 'body'
     sectionKey: 'historia',
     title: 'Nuestra historia',
     position: 1,
-    body: 'Cuenta aquí cómo nació ABRIGAR: quiénes dieron el primer paso, en qué momento y qué necesidad vieron que nadie estaba atendiendo.',
+    body: 'Cuenta aquí cómo nació Entretejidos: quiénes dieron el primer paso, en qué momento y qué necesidad vieron que nadie estaba atendiendo.',
   },
   {
     sectionKey: 'que-hacemos',
@@ -36,7 +36,7 @@ const DEFAULT_SECTIONS: Array<Pick<AboutSection, 'sectionKey' | 'title' | 'body'
     sectionKey: 'proposito',
     title: 'Nuestro propósito',
     position: 4,
-    body: 'Escribe aquí para qué existe ABRIGAR y qué quieren lograr: devolver dignidad y abrigo a quienes lo perdieron todo.',
+    body: 'Escribe aquí para qué existe Entretejidos, Comité de Abrigo, y qué quieren lograr: devolver dignidad y abrigo a quienes lo perdieron todo.',
   },
 ];
 

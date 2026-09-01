@@ -12,6 +12,7 @@ export enum AppModule {
   NEEDS = 'needs',
   CONTENT = 'content',
   TIME_VOLUNTEERS = 'time_volunteers',
+  SHIFT_LOG = 'shift_log',
 }
 
 export const ALL_APP_MODULES = Object.values(AppModule);
@@ -21,9 +22,15 @@ export function defaultModulesForRole(role: UserRole): AppModule[] {
     return [...ALL_APP_MODULES];
   }
   if (role === UserRole.RECEPTION) {
-    return [AppModule.REQUESTS, AppModule.TIME_VOLUNTEERS];
+    return [AppModule.REQUESTS, AppModule.TIME_VOLUNTEERS, AppModule.SHIFT_LOG];
   }
-  return [AppModule.INVENTORY, AppModule.DONATIONS, AppModule.REQUESTS, AppModule.NEEDS];
+  return [
+    AppModule.INVENTORY,
+    AppModule.DONATIONS,
+    AppModule.REQUESTS,
+    AppModule.NEEDS,
+    AppModule.SHIFT_LOG,
+  ];
 }
 
 export function sanitizeModules(raw: unknown): AppModule[] | null {

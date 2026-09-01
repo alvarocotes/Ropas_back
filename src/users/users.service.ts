@@ -218,7 +218,7 @@ export class UsersService implements OnModuleInit {
   async seedAdmin(): Promise<void> {
     const email = this.configService.get<string>('ADMIN_EMAIL');
     const password = this.configService.get<string>('ADMIN_PASSWORD');
-    const fullName = this.configService.get<string>('ADMIN_NAME') ?? 'Administrador ABRIGAR';
+    const fullName = this.configService.get<string>('ADMIN_NAME') ?? 'Administrador Entretejidos';
     if (!email || !password) {
       return;
     }

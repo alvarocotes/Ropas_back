@@ -14,6 +14,7 @@ import { NeedsModule } from './needs/needs.module.js';
 import { StatsModule } from './stats/stats.module.js';
 import { UsersModule } from './users/users.module.js';
 import { TimeVolunteersModule } from './time-volunteers/time-volunteers.module.js';
+import { ShiftLogsModule } from './shift-logs/shift-logs.module.js';
 import { HealthController } from './health.controller.js';
 
 function databaseOptions(config: ConfigService): TypeOrmModuleOptions {
@@ -71,6 +72,7 @@ function databaseOptions(config: ConfigService): TypeOrmModuleOptions {
     StatsModule,
     AboutModule,
     TimeVolunteersModule,
+    ShiftLogsModule,
   ],
   controllers: [HealthController],
 })
