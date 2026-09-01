@@ -10,8 +10,9 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
+import { Modules } from '../common/decorators/modules.decorator.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
-import { UserRole } from '../common/enums.js';
+import { AppModule, UserRole } from '../common/enums.js';
 import type { SafeUser } from '../users/users.service.js';
 import { AddRequestItemDto } from './dto/add-request-item.dto.js';
 import { CreateHelpRequestDto } from './dto/create-help-request.dto.js';
@@ -19,6 +20,7 @@ import { UpdateHelpRequestDto } from './dto/update-help-request.dto.js';
 import { UpdateRequestItemDto } from './dto/update-request-item.dto.js';
 import { HelpRequestsService } from './help-requests.service.js';
 
+@Modules(AppModule.REQUESTS)
 @Controller('help-requests')
 export class HelpRequestsController {
   constructor(private readonly helpRequestsService: HelpRequestsService) {}

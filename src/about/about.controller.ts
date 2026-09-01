@@ -8,8 +8,8 @@ import {
   Post,
 } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator.js';
-import { Roles } from '../common/decorators/roles.decorator.js';
-import { UserRole } from '../common/enums.js';
+import { Modules } from '../common/decorators/modules.decorator.js';
+import { AppModule } from '../common/enums.js';
 import { AboutService } from './about.service.js';
 import {
   CreateSectionDto,
@@ -33,31 +33,31 @@ export class AboutController {
     return this.aboutService.findImpact();
   }
 
-  @Roles(UserRole.ADMIN)
+  @Modules(AppModule.CONTENT)
   @Get('sections/admin')
   findAllSections() {
     return this.aboutService.findAllSections();
   }
 
-  @Roles(UserRole.ADMIN)
+  @Modules(AppModule.CONTENT)
   @Post('sections')
   createSection(@Body() dto: CreateSectionDto) {
     return this.aboutService.createSection(dto);
   }
 
-  @Roles(UserRole.ADMIN)
+  @Modules(AppModule.CONTENT)
   @Patch('sections/:id')
   updateSection(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateSectionDto) {
     return this.aboutService.updateSection(id, dto);
   }
 
-  @Roles(UserRole.ADMIN)
+  @Modules(AppModule.CONTENT)
   @Get('locations')
   findLocations() {
     return this.aboutService.findLocations();
   }
 
-  @Roles(UserRole.ADMIN)
+  @Modules(AppModule.CONTENT)
   @Patch('locations/:id')
   updateLocation(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLocationDto) {
     return this.aboutService.updateLocation(id, dto);

@@ -10,15 +10,16 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
+import { Modules } from '../common/decorators/modules.decorator.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
-import { UserRole } from '../common/enums.js';
+import { AppModule, UserRole } from '../common/enums.js';
 import type { SafeUser } from '../users/users.service.js';
 import { CreateMovementDto } from './dto/create-movement.dto.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { InventoryService } from './inventory.service.js';
 
-@Roles(UserRole.ADMIN, UserRole.VOLUNTEER)
+@Modules(AppModule.INVENTORY)
 @Controller('inventory')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}

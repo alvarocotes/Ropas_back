@@ -83,6 +83,10 @@ export class User {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
+  /** Módulos internos. `null` = los del rol. El administrador entra a todos. */
+  @Column({ type: 'simple-json', nullable: true })
+  modules: string[] | null;
+
   @OneToMany(() => VolunteerAvailability, (slot) => slot.user)
   availability: VolunteerAvailability[];
 

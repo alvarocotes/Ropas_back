@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { In, Repository } from 'typeorm';
-import { UserRole } from '../common/enums.js';
+import { UserRole, effectiveModules, sanitizeModules } from '../common/enums.js';
 import { CreateAttendanceDto } from './dto/create-attendance.dto.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto.js';
@@ -32,6 +32,7 @@ export type AttendanceRecord = {
 export type SafeUser = Omit<User, 'passwordHash' | 'availability' | 'attendances'> & {
   availability: AvailabilitySlot[];
   attendances: AttendanceRecord[];
+  modules: string[];
 };
 
 @Injectable()
@@ -49,6 +50,7 @@ export class UsersService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     await this.ensureAvailabilityTable();
     await this.ensureAttendanceTable();
+    await this.ensureModulesColumn();
     // Solo con SEED_ON_START=true: en serverless este chequeo se pagaría en
     // cada arranque en frío, antes de responder la primera petición.
     if (this.configService.get<string>('SEED_ON_START', 'false') === 'true') {
@@ -124,6 +126,14 @@ export class UsersService implements OnModuleInit {
     }
   }
 
+  private async ensureModulesColumn(): Promise<void> {
+    try {
+      await this.usersRepository.query(`ALTER TABLE users ADD COLUMN modules TEXT NULL`);
+    } catch {
+      /* ya existe */
+    }
+  }
+
   toSafe(
     user: User,
     slots?: VolunteerAvailability[],
@@ -132,6 +142,7 @@ export class UsersService implements OnModuleInit {
     const { passwordHash: _passwordHash, availability, attendances: _att, ...safe } = user;
     return {
       ...safe,
+      modules: effectiveModules(user.role, user.modules),
       availability: this.serializeAvailability(slots ?? availability),
       attendances: this.serializeAttendances(attendances),
     };
@@ -383,6 +394,7 @@ export class UsersService implements OnModuleInit {
       phone: dto.phone ?? null,
       role,
       isActive: true,
+      modules: role === UserRole.ADMIN ? null : sanitizeModules(dto.modules),
     });
     const saved = await this.usersRepository.save(user);
     return this.toSafe(saved, []);
@@ -412,6 +424,11 @@ export class UsersService implements OnModuleInit {
     if (dto.isActive !== undefined) user.isActive = dto.isActive;
     if (dto.role !== undefined) {
       user.role = dto.role;
+    }
+    if (user.role === UserRole.ADMIN) {
+      user.modules = null;
+    } else if (dto.modules !== undefined && actorId !== id) {
+      user.modules = sanitizeModules(dto.modules);
     }
     if (dto.password) {
       user.passwordHash = await bcrypt.hash(dto.password, 10);

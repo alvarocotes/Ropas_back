@@ -1,12 +1,12 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator.js';
-import { Roles } from '../common/decorators/roles.decorator.js';
-import { UserRole } from '../common/enums.js';
+import { Modules } from '../common/decorators/modules.decorator.js';
+import { AppModule } from '../common/enums.js';
 import { CreateNeedDto } from './dto/create-need.dto.js';
 import { UpdateNeedDto } from './dto/update-need.dto.js';
 import { NeedsService } from './needs.service.js';
 
-@Roles(UserRole.ADMIN, UserRole.VOLUNTEER)
+@Modules(AppModule.NEEDS)
 @Controller('needs')
 export class NeedsController {
   constructor(private readonly needsService: NeedsService) {}

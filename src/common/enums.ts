@@ -4,6 +4,58 @@ export enum UserRole {
   RECEPTION = 'reception',
 }
 
+/** Secciones internas que un administrador puede abrir o cerrar por usuario. */
+export enum AppModule {
+  INVENTORY = 'inventory',
+  DONATIONS = 'donations',
+  REQUESTS = 'requests',
+  NEEDS = 'needs',
+  CONTENT = 'content',
+  TIME_VOLUNTEERS = 'time_volunteers',
+}
+
+export const ALL_APP_MODULES = Object.values(AppModule);
+
+export function defaultModulesForRole(role: UserRole): AppModule[] {
+  if (role === UserRole.ADMIN) {
+    return [...ALL_APP_MODULES];
+  }
+  if (role === UserRole.RECEPTION) {
+    return [AppModule.REQUESTS, AppModule.TIME_VOLUNTEERS];
+  }
+  return [AppModule.INVENTORY, AppModule.DONATIONS, AppModule.REQUESTS, AppModule.NEEDS];
+}
+
+export function sanitizeModules(raw: unknown): AppModule[] | null {
+  if (!Array.isArray(raw)) {
+    return null;
+  }
+  const allowed = new Set<string>(ALL_APP_MODULES);
+  return [...new Set(raw.filter((item): item is AppModule => allowed.has(item)))];
+}
+
+export function effectiveModules(
+  role: UserRole,
+  stored: string[] | null | undefined,
+): AppModule[] {
+  if (role === UserRole.ADMIN) {
+    return [...ALL_APP_MODULES];
+  }
+  const sanitized = sanitizeModules(stored);
+  if (sanitized === null) {
+    return defaultModulesForRole(role);
+  }
+  return sanitized;
+}
+
+export function userHasModule(
+  role: UserRole,
+  stored: string[] | null | undefined,
+  module: AppModule,
+): boolean {
+  return effectiveModules(role, stored).includes(module);
+}
+
 export enum MovementType {
   ENTRADA = 'entrada',
   SALIDA = 'salida',

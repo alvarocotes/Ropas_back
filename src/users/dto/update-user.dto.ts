@@ -1,6 +1,15 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { UserRole } from '../../common/enums.js';
+import {
+  IsArray,
+  IsBoolean,
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+import { AppModule, UserRole } from '../../common/enums.js';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -43,4 +52,9 @@ export class UpdateUserDto {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
+
+  @IsOptional()
+  @IsArray()
+  @IsEnum(AppModule, { each: true })
+  modules?: AppModule[];
 }
