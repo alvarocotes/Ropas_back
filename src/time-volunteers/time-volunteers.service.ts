@@ -84,8 +84,29 @@ export class TimeVolunteersService implements OnModuleInit {
         `);
       }
       await this.ensureTransportColumns(dbType);
+      await this.dropOrphanSlots();
     } catch (err) {
       console.error('No se pudieron asegurar las tablas de voluntarios de transporte:', err);
+    }
+  }
+
+  private async dropOrphanSlots(): Promise<void> {
+    const dbType = this.configService.get<string>('DB_TYPE', 'sqlite');
+    try {
+      if (dbType === 'mysql') {
+        await this.slotsRepository.query(`
+          DELETE s FROM time_volunteer_slots s
+          LEFT JOIN time_volunteers v ON v.id = s.volunteer_id
+          WHERE v.id IS NULL
+        `);
+      } else {
+        await this.slotsRepository.query(`
+          DELETE FROM time_volunteer_slots
+          WHERE volunteer_id NOT IN (SELECT id FROM time_volunteers)
+        `);
+      }
+    } catch (err) {
+      console.error('No se pudieron limpiar horarios de voluntarios huérfanos:', err);
     }
   }
 

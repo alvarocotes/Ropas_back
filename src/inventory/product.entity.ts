@@ -36,6 +36,21 @@ export class Product {
   @Column({ name: 'public_note', type: 'varchar', length: 300, nullable: true })
   publicNote: string | null;
 
+  /** Para quién es la prenda: woman, man, girl, boy, baby. */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  audience: string | null;
+
+  /** Talla catalogada, sin distinguir prenda superior o inferior. */
+  @Column({ name: 'size_label', type: 'varchar', length: 40, nullable: true })
+  sizeLabel: string | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  garment: string | null;
+
+  /** Cómo se muestra a quien pide ayuda: Blusa, Camisa hombre, Inferior… */
+  @Column({ name: 'request_label', type: 'varchar', length: 80, nullable: true })
+  requestLabel: string | null;
+
   @OneToMany(() => InventoryMovement, (movement) => movement.product)
   movements: InventoryMovement[];
 

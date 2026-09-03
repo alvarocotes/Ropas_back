@@ -21,7 +21,10 @@ export class TimeVolunteerSlot {
   @Column({ name: 'volunteer_id' })
   volunteerId: number;
 
-  @ManyToOne('TimeVolunteer', 'slots', { onDelete: 'CASCADE' })
+  @ManyToOne('TimeVolunteer', 'slots', {
+    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'volunteer_id' })
   volunteer: object;
 

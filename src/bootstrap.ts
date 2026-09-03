@@ -15,6 +15,7 @@ const CACHEABLE_PATHS = new Set([
   '/api/stats/volunteers-count',
   '/api/about/sections',
   '/api/about/impact',
+  '/api/inventory/clothing-sizes',
 ]);
 
 /**

@@ -3,10 +3,22 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { MovementType, UserRole } from '../common/enums.js';
+import {
+  CLOTHING_AUDIENCES,
+  audiencesForName,
+  extractSizes,
+  looksLikeClothing,
+  normalizeSize,
+  requestDisplayLabel,
+  sortSizes,
+  type ClothingAudience,
+} from './clothing-sizes.js';
 import { CreateMovementDto } from './dto/create-movement.dto.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
@@ -14,20 +26,133 @@ import { InventoryMovement } from './inventory-movement.entity.js';
 import { Product } from './product.entity.js';
 
 @Injectable()
-export class InventoryService {
+export class InventoryService implements OnModuleInit {
   constructor(
     @InjectRepository(Product)
     private readonly productsRepository: Repository<Product>,
     @InjectRepository(InventoryMovement)
     private readonly movementsRepository: Repository<InventoryMovement>,
     private readonly dataSource: DataSource,
+    private readonly configService: ConfigService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.ensureClothingColumns();
+  }
+
+  private async ensureClothingColumns(): Promise<void> {
+    const dbType = this.configService.get<string>('DB_TYPE', 'sqlite');
+    try {
+      if (dbType === 'mysql') {
+        await this.productsRepository.query(
+          'ALTER TABLE products ADD COLUMN audience VARCHAR(16) NULL',
+        );
+      } else {
+        await this.productsRepository.query('ALTER TABLE products ADD COLUMN audience VARCHAR(16)');
+      }
+    } catch {
+      /* ya existe */
+    }
+    try {
+      if (dbType === 'mysql') {
+        await this.productsRepository.query(
+          'ALTER TABLE products ADD COLUMN size_label VARCHAR(40) NULL',
+        );
+      } else {
+        await this.productsRepository.query(
+          'ALTER TABLE products ADD COLUMN size_label VARCHAR(40)',
+        );
+      }
+    } catch {
+      /* ya existe */
+    }
+    try {
+      if (dbType === 'mysql') {
+        await this.productsRepository.query(
+          'ALTER TABLE products ADD COLUMN garment VARCHAR(16) NULL',
+        );
+      } else {
+        await this.productsRepository.query('ALTER TABLE products ADD COLUMN garment VARCHAR(16)');
+      }
+    } catch {
+      /* ya existe */
+    }
+    try {
+      if (dbType === 'mysql') {
+        await this.productsRepository.query(
+          'ALTER TABLE products ADD COLUMN request_label VARCHAR(80) NULL',
+        );
+      } else {
+        await this.productsRepository.query(
+          'ALTER TABLE products ADD COLUMN request_label VARCHAR(80)',
+        );
+      }
+    } catch {
+      /* ya existe */
+    }
+  }
 
   findAll() {
     return this.productsRepository.find({
       where: { isActive: true },
       order: { name: 'ASC' },
     });
+  }
+
+  async findClothingSizes(): Promise<
+    Record<ClothingAudience, { label: string; sizes: string[] }[]>
+  > {
+    await this.ensureClothingColumns();
+    const products = await this.productsRepository.find({ where: { isActive: true } });
+    const buckets: Record<ClothingAudience, Map<string, Set<string>>> = {
+      woman: new Map(),
+      man: new Map(),
+      girl: new Map(),
+      boy: new Map(),
+      baby: new Map(),
+    };
+    const add = (audience: ClothingAudience, label: string, size: string) => {
+      const map = buckets[audience];
+      const set = map.get(label) ?? new Set<string>();
+      set.add(size);
+      map.set(label, set);
+    };
+    for (const product of products) {
+      const groups = CLOTHING_AUDIENCES.includes(product.audience as ClothingAudience)
+        ? [product.audience as ClothingAudience]
+        : audiencesForName(product.name);
+      if (groups.length === 0) continue;
+      if (!product.audience && !looksLikeClothing(product.name)) continue;
+
+      const sizes = new Set<string>();
+      if (product.sizeLabel?.trim()) {
+        sizes.add(normalizeSize(product.sizeLabel));
+      }
+      for (const size of extractSizes(product.name)) {
+        sizes.add(size);
+      }
+      if (sizes.size === 0) continue;
+      for (const group of groups) {
+        const label = requestDisplayLabel(
+          group,
+          product.name,
+          product.garment,
+          product.requestLabel,
+        );
+        for (const size of sizes) add(group, label, size);
+      }
+    }
+    const pack = (map: Map<string, Set<string>>) =>
+      [...map.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0], 'es'))
+        .map(([label, sizes]) => ({ label, sizes: sortSizes([...sizes]) }));
+    return {
+      woman: pack(buckets.woman),
+      man: pack(buckets.man),
+      girl: pack(buckets.girl),
+      boy: pack(buckets.boy),
+      baby: pack(buckets.baby),
+    };
   }
 
   findAlerts() {
@@ -56,6 +181,9 @@ export class InventoryService {
       isActive: true,
       publishWhenLow: dto.publishWhenLow ?? false,
       publicNote: dto.publicNote ?? null,
+      audience: dto.audience ?? null,
+      sizeLabel: dto.sizeLabel?.trim() ? normalizeSize(dto.sizeLabel) : null,
+      requestLabel: dto.requestLabel?.trim() ? dto.requestLabel.trim() : null,
     });
     return this.productsRepository.save(product);
   }
@@ -79,6 +207,13 @@ export class InventoryService {
     if (dto.isActive !== undefined) product.isActive = dto.isActive;
     if (dto.publishWhenLow !== undefined) product.publishWhenLow = dto.publishWhenLow;
     if (dto.publicNote !== undefined) product.publicNote = dto.publicNote || null;
+    if (dto.audience !== undefined) product.audience = dto.audience;
+    if (dto.sizeLabel !== undefined) {
+      product.sizeLabel = dto.sizeLabel?.trim() ? normalizeSize(dto.sizeLabel) : null;
+    }
+    if (dto.requestLabel !== undefined) {
+      product.requestLabel = dto.requestLabel?.trim() ? dto.requestLabel.trim() : null;
+    }
     return this.productsRepository.save(product);
   }
 

@@ -42,10 +42,20 @@ function databaseOptions(config: ConfigService): TypeOrmModuleOptions {
       // Hostinger y otros MySQL remotos suelen exigir TLS desde Vercel.
       ssl: remote ? { rejectUnauthorized: false } : undefined,
       // Fallar rápido en lugar de reintentar diez veces y agotar el tiempo de la función.
-      retryAttempts: 2,
-      retryDelay: 1000,
-      // Un MySQL compartido tiene pocas conexiones y cada instancia abre su propio pool.
-      extra: { connectionLimit: 3, connectTimeout: 10000 },
+      retryAttempts: remote ? 5 : 2,
+      retryDelay: remote ? 2000 : 1000,
+      // MySQL compartido (Hostinger) cierra conexiones idle; keep-alive y
+      // reciclar el pool evitan ECONNRESET / ETIMEDOUT al volver a consultar.
+      extra: {
+        connectionLimit: 3,
+        connectTimeout: remote ? 20000 : 10000,
+        waitForConnections: true,
+        queueLimit: 10,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 10_000,
+        idleTimeout: remote ? 25_000 : 60_000,
+        maxIdle: 2,
+      },
     };
   }
   return {

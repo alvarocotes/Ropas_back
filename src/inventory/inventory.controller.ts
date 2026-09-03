@@ -10,6 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
+import { Public } from '../common/decorators/public.decorator.js';
 import { Modules } from '../common/decorators/modules.decorator.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { AppModule, UserRole } from '../common/enums.js';
@@ -23,6 +24,12 @@ import { InventoryService } from './inventory.service.js';
 @Controller('inventory')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
+
+  @Public()
+  @Get('clothing-sizes')
+  findClothingSizes() {
+    return this.inventoryService.findClothingSizes();
+  }
 
   @Get('products')
   findAll() {
