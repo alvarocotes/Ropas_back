@@ -131,6 +131,9 @@ export class InventoryService implements OnModuleInit {
       for (const size of extractSizes(product.name)) {
         sizes.add(size);
       }
+      if (sizes.size === 0 && product.audience) {
+        sizes.add('Única');
+      }
       if (sizes.size === 0) continue;
       for (const group of groups) {
         const label = requestDisplayLabel(

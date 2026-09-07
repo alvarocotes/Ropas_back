@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { MovementType, RequestStatus, UserRole } from '../common/enums.js';
+import { MovementType, RequestStatus, UserRole, userCanPack, userCanTransport } from '../common/enums.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 import type { SafeUser } from '../users/users.service.js';
 import { AddRequestItemDto } from './dto/add-request-item.dto.js';
@@ -17,22 +17,29 @@ import { UpdateHelpRequestDto } from './dto/update-help-request.dto.js';
 import { HelpRequestItem } from './help-request-item.entity.js';
 import { HelpRequest } from './help-request.entity.js';
 
-/** Estados que puede fijar cada rol al actualizar una solicitud. */
-const ALLOWED_STATUSES: Record<UserRole, RequestStatus[]> = {
-  [UserRole.ADMIN]: [
-    RequestStatus.RECIBIDO,
-    RequestStatus.EN_PROCESO,
-    RequestStatus.LISTO,
-    RequestStatus.ENTREGADO,
-    RequestStatus.CANCELADO,
-  ],
-  [UserRole.VOLUNTEER]: [
-    RequestStatus.EN_PROCESO,
-    RequestStatus.LISTO,
-    RequestStatus.CANCELADO,
-  ],
-  [UserRole.RECEPTION]: [RequestStatus.ENTREGADO, RequestStatus.CANCELADO],
-};
+function allowedStatusesFor(user: SafeUser): RequestStatus[] {
+  if (user.role === UserRole.ADMIN) {
+    return [
+      RequestStatus.RECIBIDO,
+      RequestStatus.EN_PROCESO,
+      RequestStatus.LISTO,
+      RequestStatus.ENTREGADO,
+      RequestStatus.CANCELADO,
+    ];
+  }
+  const statuses = new Set<RequestStatus>();
+  if (userCanPack(user.role, user.modules)) {
+    statuses.add(RequestStatus.EN_PROCESO);
+    statuses.add(RequestStatus.LISTO);
+    statuses.add(RequestStatus.CANCELADO);
+  }
+  if (userCanTransport(user.role, user.modules)) {
+    statuses.add(RequestStatus.LISTO);
+    statuses.add(RequestStatus.ENTREGADO);
+    statuses.add(RequestStatus.CANCELADO);
+  }
+  return [...statuses];
+}
 
 @Injectable()
 export class HelpRequestsService implements OnModuleInit {
@@ -138,6 +145,10 @@ export class HelpRequestsService implements OnModuleInit {
     }
   }
 
+  findCatalog() {
+    return this.inventoryService.findAll();
+  }
+
   async findOne(id: number) {
     const request = await this.requestsRepository.findOne({
       where: { id },
@@ -189,7 +200,7 @@ export class HelpRequestsService implements OnModuleInit {
   /** Un voluntario toma la solicitud para alistar lo que se va a entregar. */
   async claim(id: number, user: SafeUser) {
     const request = await this.findOne(id);
-    if (user.role === UserRole.RECEPTION) {
+    if (!userCanPack(user.role, user.modules)) {
       throw new ForbiddenException('Recepción no alista solicitudes, solo gestiona el transporte');
     }
     if (this.isClosed(request)) {
@@ -228,8 +239,8 @@ export class HelpRequestsService implements OnModuleInit {
   /** Recepción toma una solicitud ya alistada para gestionar el transporte. */
   async claimReception(id: number, user: SafeUser) {
     const request = await this.findOne(id);
-    if (user.role !== UserRole.ADMIN && user.role !== UserRole.RECEPTION) {
-      throw new ForbiddenException('Solo recepción gestiona el transporte');
+    if (!userCanTransport(user.role, user.modules)) {
+      throw new ForbiddenException('No tienes permiso para gestionar el transporte');
     }
     if (this.isClosed(request)) {
       throw new BadRequestException('Esta solicitud ya está cerrada');
@@ -315,7 +326,7 @@ export class HelpRequestsService implements OnModuleInit {
     if (user.role === UserRole.ADMIN) {
       return;
     }
-    if (user.role === UserRole.RECEPTION) {
+    if (!userCanPack(user.role, user.modules)) {
       throw new ForbiddenException('Recepción no modifica el contenido del paquete');
     }
     if (request.assignedToId !== user.id) {
@@ -333,31 +344,31 @@ export class HelpRequestsService implements OnModuleInit {
     }
 
     const isAdmin = user.role === UserRole.ADMIN;
-    const isReception = user.role === UserRole.RECEPTION;
+    const canTransport = userCanTransport(user.role, user.modules);
+    const canPack = userCanPack(user.role, user.modules);
 
     if (!isAdmin) {
-      if (isReception) {
+      const asTransport = canTransport && request.receptionUserId === user.id;
+      const asPacker = canPack && request.assignedToId === user.id;
+      if (asTransport) {
         if (request.status !== RequestStatus.LISTO) {
-          throw new ForbiddenException('Recepción solo gestiona solicitudes listas');
+          throw new ForbiddenException('Transporte solo gestiona solicitudes listas');
         }
-        if (request.receptionUserId !== user.id) {
-          throw new ForbiddenException('Primero toma esta entrega en recepción');
-        }
-      } else if (request.assignedToId !== user.id) {
+      } else if (!asPacker) {
         throw new ForbiddenException('Primero toma esta solicitud para gestionarla');
       }
     }
 
-    if (dto.internalNotes !== undefined && !isReception) {
+    if (dto.internalNotes !== undefined && canPack) {
       request.internalNotes = dto.internalNotes;
     }
-    if (dto.transportNotes !== undefined && (isAdmin || isReception)) {
+    if (dto.transportNotes !== undefined && (isAdmin || canTransport)) {
       request.transportNotes = dto.transportNotes;
     }
 
     if (dto.status && dto.status !== request.status) {
-      if (!ALLOWED_STATUSES[user.role].includes(dto.status)) {
-        throw new ForbiddenException(`Tu rol no puede marcar la solicitud como ${dto.status}`);
+      if (!allowedStatusesFor(user).includes(dto.status)) {
+        throw new ForbiddenException(`No puedes marcar la solicitud como ${dto.status}`);
       }
       // No se puede pasar a recepción sin decir qué se va a entregar.
       if (

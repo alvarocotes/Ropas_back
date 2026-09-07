@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
-import { Modules } from '../common/decorators/modules.decorator.js';
+import { AnyModules } from '../common/decorators/modules.decorator.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { AppModule, UserRole } from '../common/enums.js';
 import type { SafeUser } from '../users/users.service.js';
@@ -20,7 +20,7 @@ import { UpdateHelpRequestDto } from './dto/update-help-request.dto.js';
 import { UpdateRequestItemDto } from './dto/update-request-item.dto.js';
 import { HelpRequestsService } from './help-requests.service.js';
 
-@Modules(AppModule.REQUESTS)
+@AnyModules(AppModule.REQUESTS, AppModule.TRANSPORT)
 @Controller('help-requests')
 export class HelpRequestsController {
   constructor(private readonly helpRequestsService: HelpRequestsService) {}
@@ -34,6 +34,11 @@ export class HelpRequestsController {
   @Get()
   findAll() {
     return this.helpRequestsService.findAll();
+  }
+
+  @Get('catalog')
+  findCatalog() {
+    return this.helpRequestsService.findCatalog();
   }
 
   @Get(':id')
@@ -53,7 +58,7 @@ export class HelpRequestsController {
     return this.helpRequestsService.release(id, user);
   }
 
-  @Roles(UserRole.ADMIN, UserRole.RECEPTION)
+  @Roles(UserRole.ADMIN, UserRole.VOLUNTEER, UserRole.RECEPTION)
   @Post(':id/claim-reception')
   claimReception(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: SafeUser) {
     return this.helpRequestsService.claimReception(id, user);

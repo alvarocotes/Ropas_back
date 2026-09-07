@@ -1,7 +1,7 @@
 import { Injectable, type CanActivate, type ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
-import { MODULES_KEY } from '../decorators/modules.decorator.js';
+import { ANY_MODULES_KEY, MODULES_KEY } from '../decorators/modules.decorator.js';
 import { AppModule, UserRole, userHasModule } from '../enums.js';
 
 type RequestUser = {
@@ -20,6 +20,16 @@ export class ModulesGuard implements CanActivate {
     ]);
     if (isPublic) {
       return true;
+    }
+    const anyRequired = this.reflector.getAllAndOverride<AppModule[]>(ANY_MODULES_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (anyRequired && anyRequired.length > 0) {
+      const request = context.switchToHttp().getRequest<{ user: RequestUser }>();
+      const user = request.user;
+      if (!user) return false;
+      return anyRequired.some((module) => userHasModule(user.role, user.modules, module));
     }
     const required = this.reflector.getAllAndOverride<AppModule[]>(MODULES_KEY, [
       context.getHandler(),

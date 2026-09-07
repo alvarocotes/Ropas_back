@@ -13,6 +13,7 @@ export enum AppModule {
   CONTENT = 'content',
   TIME_VOLUNTEERS = 'time_volunteers',
   SHIFT_LOG = 'shift_log',
+  TRANSPORT = 'transport',
 }
 
 export const ALL_APP_MODULES = Object.values(AppModule);
@@ -22,7 +23,7 @@ export function defaultModulesForRole(role: UserRole): AppModule[] {
     return [...ALL_APP_MODULES];
   }
   if (role === UserRole.RECEPTION) {
-    return [AppModule.REQUESTS, AppModule.TIME_VOLUNTEERS, AppModule.SHIFT_LOG];
+    return [AppModule.REQUESTS, AppModule.TRANSPORT, AppModule.TIME_VOLUNTEERS, AppModule.SHIFT_LOG];
   }
   return [
     AppModule.INVENTORY,
@@ -61,6 +62,26 @@ export function userHasModule(
   module: AppModule,
 ): boolean {
   return effectiveModules(role, stored).includes(module);
+}
+
+/** Puede tomar entregas listas y marcar transporte/entrega. */
+export function userCanTransport(
+  role: UserRole,
+  stored: string[] | null | undefined,
+): boolean {
+  if (role === UserRole.ADMIN) return true;
+  if (role === UserRole.RECEPTION) return true;
+  return userHasModule(role, stored, AppModule.TRANSPORT);
+}
+
+/** Puede alistar paquetes (no aplica al rol de recepción). */
+export function userCanPack(
+  role: UserRole,
+  stored: string[] | null | undefined,
+): boolean {
+  if (role === UserRole.ADMIN) return true;
+  if (role === UserRole.RECEPTION) return false;
+  return userHasModule(role, stored, AppModule.REQUESTS);
 }
 
 export enum MovementType {
